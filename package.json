@@ -1,0 +1,15 @@
+{
+  "name": "pdf-toc-studio",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build",
+    "frontend:preview": "npm --prefix frontend run preview",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.2"
+  }
+}

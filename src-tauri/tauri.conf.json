@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "PDF ToC Studio",
+  "version": "0.1.0",
+  "identifier": "com.codex.pdftocstudio",
+  "build": {
+    "beforeDevCommand": "npm run frontend:dev",
+    "beforeBuildCommand": "npm run frontend:build",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../frontend/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "PDF ToC Studio",
+        "width": 1400,
+        "height": 920,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": []
+  }
+}
