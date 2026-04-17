@@ -1,0 +1,4 @@
+interface:
+  display_name: "PDF ToC Studio"
+  short_description: "Preview and export PDF bookmarks from plain-text TOC."
+  default_prompt: "Use $pdf-toc-studio to validate a plain-text TOC, preview logical-to-physical page mappings, and export a bookmarked PDF when the result is valid."

@@ -1,128 +1,167 @@
 # PDF ToC Studio
 
-Cross-platform desktop software for importing a plain-text table of contents, mapping it onto the physical pages of a PDF, and exporting a new PDF with bookmarks and page labels.
+PDF ToC Studio is a desktop app and automation-ready toolkit for adding PDF bookmarks, table of contents navigation, and logical page labels from plain-text TOC input.
 
-## Current Status
+PDF ToC Studio 是一个面向桌面与自动化场景的 PDF 目录工具，可基于纯文本目录为 PDF 添加书签、目录导航和逻辑页码标签。
 
-The repository now contains a dual-stack MVP:
+## PDF Bookmark Tool for Plain-Text TOC Workflows
 
-- `Python + Tkinter + PyMuPDF` for a runnable desktop prototype today
-- `Tauri + React + Python bridge` scaffolding for the next-generation desktop shell
+If you need to add bookmarks to a PDF, create a navigable table of contents, repair logical page numbers, or convert a text TOC into PDF outline metadata, PDF ToC Studio is built for that workflow.
 
-It already supports:
+适用场景包括：
 
-- importing a source PDF
-- pasting or loading plain-text TOC content
-- parsing heading levels from indentation
-- mapping logical page numbers to physical PDF pages with an offset
-- writing PDF bookmarks
-- writing PDF page labels
-- previewing parsed mappings and validation results
-- returning JSON results through a Python bridge for Tauri
+- add bookmarks to PDF files
+- create PDF table of contents navigation
+- map logical page numbers to physical PDF pages
+- generate PDF outline data from plain-text TOC
+- automate PDF bookmark creation with CLI or LLM skill
 
-## Quick Start
+## Features | 功能特性
 
-### Launch the Tk desktop app
+- Convert plain-text TOC into structured PDF bookmarks
+- Add logical page labels for better PDF reader navigation
+- Support indentation-based heading hierarchy
+- Preview page mappings before export
+- Validate page overflow and hierarchy issues
+- Use from desktop UI, CLI, JSON bridge, or LLM skill
+
+- 将纯文本目录转换为结构化 PDF 书签
+- 添加逻辑页码标签，提升 PDF 阅读器导航体验
+- 支持基于缩进的目录层级识别
+- 导出前预览页码映射
+- 校验页码越界与层级异常
+- 可通过桌面界面、CLI、JSON bridge 或大模型 skill 使用
+
+## Use Cases | 使用场景
+
+- Scanned books that need PDF bookmarks
+- Technical manuals with front matter offsets
+- Academic or educational PDFs without navigation
+- Digitized books that need logical page labels
+- Batch PDF bookmark generation pipelines
+
+## Quick Start | 快速开始
+
+### Install dependencies | 安装依赖
 
 ```bash
-cd /Users/tywin/Downloads/test/航空电子技术/pdf-toc-studio
+git clone <your-repo-url>
+cd pdf-toc-studio
+pip install -r requirements.txt
+npm install
+cd frontend
+npm install
+cd ..
+```
+
+### Launch the desktop app | 启动桌面应用
+
+Tk desktop prototype:
+
+```bash
 python3 launch.py
 ```
 
-### Run the CLI
+Tauri desktop shell:
 
 ```bash
-cd /Users/tywin/Downloads/test/航空电子技术/pdf-toc-studio
-python3 -m core.cli --pdf ../航空电子技术（正文）.pdf --toc ../toc.txt --out ../pdf-toc-studio-output.pdf --offset 8
+npm run tauri:dev
 ```
 
-### Preview only
+### Preview a TOC mapping | 预览目录映射
 
 ```bash
-python3 -m core.cli --pdf ../航空电子技术（正文）.pdf --toc ../toc.txt --out ../pdf-toc-studio-output.pdf --offset 8 --preview
+python3 -m core.cli \
+  --pdf ./examples/source.pdf \
+  --toc ./examples/toc.txt \
+  --out ./examples/output.pdf \
+  --offset 8 \
+  --preview
 ```
 
-### Test the Tauri bridge directly
+### Export a bookmarked PDF | 导出带书签的 PDF
 
 ```bash
-python3 -m core.bridge <<'EOF'
-{"action":"preview","sourcePdf":"../航空电子技术（正文）.pdf","tocText":"第1章 概述    1","offset":8}
-EOF
+python3 -m core.cli \
+  --pdf ./examples/source.pdf \
+  --toc ./examples/toc.txt \
+  --out ./examples/output.pdf \
+  --offset 8
 ```
 
-## Tauri Layout
+## How It Works | 工作原理
 
-- `frontend/`
-  React + Vite UI.
-- `src-tauri/`
-  Tauri shell and Rust command bridge.
-- `core/bridge.py`
-  JSON bridge used by Tauri to call the existing Python core.
+1. Import or paste a plain-text table of contents.
+2. Set the logical-to-physical page offset.
+3. Preview the parsed hierarchy and page mapping.
+4. Validate warnings and errors.
+5. Export a new PDF with bookmarks and logical page labels.
 
-The current Tauri plan is:
+## Example TOC Format | 目录格式示例
 
-1. Tauri frontend collects file paths, TOC text, and offset.
-2. Rust command invokes `python3 -m core.bridge`.
-3. The Python bridge calls the shared TOC engine.
-4. JSON response goes back to the frontend for preview or export status.
+```text
+Chapter 1 Introduction    1
+    1.1 Background    3
+    1.2 Scope    9
+Chapter 2 Methods    17
+```
 
-## Expected Tauri Startup Flow
+Rule:
 
-After installing frontend and Tauri dependencies, the intended commands are:
+- every line ends with a logical page number
+- every 4 leading spaces create one child level
+- physical page = logical page + offset
+
+## LLM Skill Usage | 大模型 Skill 用法
+
+This repository includes a reusable skill package in `skills/pdf-toc-studio/` and a stable script entry for model-driven workflows.
+
+兼容方式分为两类：
+
+- skill-aware platforms:
+  直接调用 `pdf-toc-studio` 或使用平台自己的 skill 语法
+- general chat or agent platforms:
+  直接运行 `skills/pdf-toc-studio/scripts/run_pdf_toc_studio.py`
+
+Typical prompts:
+
+- Codex / OpenAI-style: `Use $pdf-toc-studio to preview a TOC mapping for ./examples/source.pdf using this TOC text and offset 8.`
+- Claude / Gemini-style: `Use the pdf-toc-studio workflow in this repository, run the script in preview mode for ./examples/source.pdf with offset 8, and summarize the JSON result.`
+- 通用 Agent 风格：`运行 skills/pdf-toc-studio/scripts/run_pdf_toc_studio.py，将 ./examples/source.pdf 与 ./examples/toc.txt 做预览或导出，并返回 JSON 结果摘要。`
+
+Stable script example:
 
 ```bash
-cd /Users/tywin/Downloads/test/航空电子技术/pdf-toc-studio/frontend
-npm install
+python3 skills/pdf-toc-studio/scripts/run_pdf_toc_studio.py \
+  preview \
+  --pdf ./examples/source.pdf \
+  --toc-file ./examples/toc.txt \
+  --offset 8
 ```
 
-```bash
-cd /Users/tywin/Downloads/test/航空电子技术/pdf-toc-studio
-npx tauri dev
-```
+## Repository Structure | 仓库结构
 
-I have added the project structure and bridge contract, but I have not run the full Tauri app yet because this workspace has not installed the frontend / Tauri npm dependencies.
+- `core/toc_engine.py`: TOC parsing, validation, bookmark export, page-label generation
+- `core/cli.py`: command-line interface for preview and export
+- `core/bridge.py`: JSON interface for desktop shells and automation
+- `app/main.py`: Tk desktop app
+- `frontend/`: Tauri + React frontend
+- `skills/pdf-toc-studio/`: packaged LLM skill definition and script wrapper
 
-## Workflow
+## FAQ
 
-1. Choose a source PDF.
-2. Paste or import a TOC text block.
-3. Set the page offset.
-4. Preview logical page to physical page mapping.
-5. Export a new PDF with bookmarks and page labels.
+### Can this add bookmarks to an existing PDF?
 
-If logical page `1` starts at PDF page `9`, use offset `8`.
+Yes. The tool reads an existing PDF and writes a new PDF with bookmark and page-label metadata.
 
-## Project Structure
+### Does it support logical page numbers?
 
-- `app/main.py`
-  Tkinter desktop UI.
-- `core/toc_engine.py`
-  TOC parsing, validation, bookmark generation, and page label generation.
-- `core/bridge.py`
-  JSON bridge for Tauri-to-Python communication.
-- `core/cli.py`
-  Command-line interface for preview and export.
-- `frontend/`
-  React + Vite frontend scaffold for Tauri.
-- `src-tauri/`
-  Rust shell for Tauri commands.
-- `launch.py`
-  Desktop app entry point.
-- `docs/`
-  Product and planning documents.
+Yes. It supports page offsets so you can align printed page numbers with actual PDF pages.
 
-## Documentation
+### Is it suitable for LLM or agent automation?
 
-- [Product Requirements](/Users/tywin/Downloads/test/航空电子技术/pdf-toc-studio/docs/product-requirements.md)
-- [Architecture](/Users/tywin/Downloads/test/航空电子技术/pdf-toc-studio/docs/architecture.md)
-- [Development Guide](/Users/tywin/Downloads/test/航空电子技术/pdf-toc-studio/docs/development.md)
-- [Roadmap](/Users/tywin/Downloads/test/航空电子技术/pdf-toc-studio/docs/roadmap.md)
-- [MVP Plan](/Users/tywin/Downloads/test/航空电子技术/pdf-toc-studio/docs/mvp-plan.md)
+Yes. The project includes a CLI, JSON bridge, and a reusable skill package for model-driven workflows.
 
-## Suggested Next Product Steps
+## Keywords
 
-1. Install npm and Tauri frontend dependencies and verify `npx tauri dev`.
-2. Add file-picker integration in the React frontend.
-3. Add editable TOC tree view.
-4. Add embedded PDF preview.
-5. Package both Tk and Tauri variants for distribution.
+PDF bookmark tool, PDF table of contents generator, PDF outline editor, logical page labels, TOC to PDF bookmarks, plain-text TOC parser, desktop PDF bookmark app, PDF bookmark automation
