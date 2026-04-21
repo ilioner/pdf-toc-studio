@@ -127,6 +127,7 @@ function mockCall<T>(payload: Record<string, unknown>): Promise<T> {
     const minWidth = Number(payload.minWidth ?? 0);
     const minHeight = Number(payload.minHeight ?? 0);
     const minBytes = Number(payload.minBytes ?? 0);
+    const requireTitle = Boolean(payload.requireTitle ?? false);
     return Promise.resolve({
       ok: true,
       outputDir,
@@ -135,12 +136,14 @@ function mockCall<T>(payload: Record<string, unknown>): Promise<T> {
         .map((index) => ({
         pageNumber: index,
         imageIndex: 1,
+        title: index === 1 ? "图 1-1 航空电子系统结构" : null,
         width: index === 1 ? 1200 : 640,
         height: index === 1 ? 800 : 480,
         extension: "png",
         outputPath: `${outputDir}/page-${String(index).padStart(4, "0")}-img-01-xref-${index}.png`
         }))
         .filter((image) => image.width >= minWidth && image.height >= minHeight && 120000 >= minBytes)
+        .filter((image) => !requireTitle || Boolean(image.title))
     } as T);
   }
 
@@ -197,6 +200,7 @@ export function extractPdfImages(payload: {
   minWidth: number;
   minHeight: number;
   minBytes: number;
+  requireTitle: boolean;
 }): Promise<ExtractImagesResult> {
   return callBackend<ExtractImagesResult>({
     action: "extract_images",

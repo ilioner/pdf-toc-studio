@@ -48,6 +48,7 @@ export type SplitResult = {
 export type ExtractedImage = {
   pageNumber: number;
   imageIndex: number;
+  title?: string | null;
   width: number;
   height: number;
   extension: string;

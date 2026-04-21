@@ -36,6 +36,7 @@ class SplitResult:
 class ExtractedImageResult:
     page_number: int
     image_index: int
+    title: str | None
     width: int
     height: int
     extension: str
@@ -183,6 +184,64 @@ def _sanitize_filename_part(value: str) -> str:
     cleaned = re.sub(r"[^\w\-]+", "-", value.strip(), flags=re.UNICODE)
     cleaned = cleaned.strip("-_")
     return cleaned or "segment"
+
+
+def _extract_image_object_title(image: tuple) -> str | None:
+    for value in image[7:]:
+        if isinstance(value, str):
+            candidate = value.strip()
+            if candidate and not candidate.lower().startswith("fzimg"):
+                return candidate
+    return None
+
+
+def _match_caption_title(text: str) -> str | None:
+    normalized = " ".join(text.split())
+    patterns = [
+        r"^(图\s*\d+(?:[-.]\d+)*[:：.、]?\s*.+)$",
+        r"^(表\s*\d+(?:[-.]\d+)*[:：.、]?\s*.+)$",
+        r"^((?:Figure|Fig\.?)\s*\d+(?:[-.]\d+)*[:：.、]?\s*.+)$",
+    ]
+    for pattern in patterns:
+        match = re.match(pattern, normalized, flags=re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+    return None
+
+
+def _horizontal_overlap_ratio(a: fitz.Rect, b: fitz.Rect) -> float:
+    overlap = max(0.0, min(a.x1, b.x1) - max(a.x0, b.x0))
+    width = max(1.0, min(a.width, b.width))
+    return overlap / width
+
+
+def _extract_caption_title(page: fitz.Page, image_rect: fitz.Rect) -> str | None:
+    blocks = page.get_text("blocks", sort=True)
+    candidates: list[tuple[float, str]] = []
+
+    for block in blocks:
+        block_rect = fitz.Rect(block[:4])
+        text = str(block[4]).strip()
+        if not text:
+            continue
+        if _horizontal_overlap_ratio(image_rect, block_rect) < 0.35:
+            continue
+
+        is_below = 0 <= block_rect.y0 - image_rect.y1 <= 96
+        is_above = 0 <= image_rect.y0 - block_rect.y1 <= 64
+        if not (is_below or is_above):
+            continue
+
+        caption = _match_caption_title(text)
+        if caption:
+            distance = min(abs(block_rect.y0 - image_rect.y1), abs(image_rect.y0 - block_rect.y1))
+            candidates.append((distance, caption))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda item: item[0])
+    return candidates[0][1]
 
 
 def _build_output_filename(index: int, plan: _SplitPlan) -> str:
@@ -357,6 +416,7 @@ def extract_pdf_images(
     min_width: int = 0,
     min_height: int = 0,
     min_bytes: int = 0,
+    require_title: bool = False,
 ) -> list[ExtractedImageResult]:
     source_pdf = Path(source_pdf)
     output_dir = Path(output_dir)
@@ -375,23 +435,42 @@ def extract_pdf_images(
                 if xref in seen_xrefs:
                     continue
 
-                seen_xrefs.add(xref)
                 image_data = doc.extract_image(xref)
                 width = int(image_data.get("width", 0))
                 height = int(image_data.get("height", 0))
                 image_bytes = image_data["image"]
                 if width < min_width or height < min_height or len(image_bytes) < min_bytes:
+                    seen_xrefs.add(xref)
                     continue
 
+                image_rects = page.get_image_rects(xref)
+                object_title = _extract_image_object_title(image)
+                caption_title = None
+                for image_rect in image_rects:
+                    caption_title = _extract_caption_title(page, image_rect)
+                    if caption_title:
+                        break
+                resolved_title = caption_title or object_title
+                if require_title and not resolved_title:
+                    seen_xrefs.add(xref)
+                    continue
+
+                seen_xrefs.add(xref)
                 page_image_index += 1
                 extension = image_data.get("ext", "png")
-                output_path = output_dir / f"page-{page_number:04d}-img-{page_image_index:02d}-xref-{xref}.{extension}"
+                base_name = (
+                    f"page-{page_number:04d}-{_sanitize_filename_part(resolved_title)}"
+                    if resolved_title
+                    else f"page-{page_number:04d}-img-{page_image_index:02d}-xref-{xref}"
+                )
+                output_path = output_dir / f"{base_name}.{extension}"
                 output_path.write_bytes(image_bytes)
 
                 results.append(
                     ExtractedImageResult(
                         page_number=page_number,
                         image_index=page_image_index,
+                        title=resolved_title,
                         width=width,
                         height=height,
                         extension=extension,

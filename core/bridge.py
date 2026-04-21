@@ -126,6 +126,7 @@ def extract_images_payload(payload: dict) -> dict:
     min_width = int(payload.get("minWidth", 0))
     min_height = int(payload.get("minHeight", 0))
     min_bytes = int(payload.get("minBytes", 0))
+    require_title = bool(payload.get("requireTitle", False))
 
     images = extract_pdf_images(
         source_pdf,
@@ -133,6 +134,7 @@ def extract_images_payload(payload: dict) -> dict:
         min_width=min_width,
         min_height=min_height,
         min_bytes=min_bytes,
+        require_title=require_title,
     )
 
     return {
@@ -143,6 +145,7 @@ def extract_images_payload(payload: dict) -> dict:
             {
                 "pageNumber": image.page_number,
                 "imageIndex": image.image_index,
+                "title": image.title,
                 "width": image.width,
                 "height": image.height,
                 "extension": image.extension,

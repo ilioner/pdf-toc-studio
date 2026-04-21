@@ -106,6 +106,8 @@ type Copy = {
   extractSection: string;
   extractTitle: string;
   extractFilterTitle: string;
+  titledImagesOnly: string;
+  titledImagesHint: string;
   byPage: string;
   byChapter: string;
   customRange: string;
@@ -156,6 +158,7 @@ type Copy = {
   noImages: string;
   imageResults: string;
   imageCount: (count: number) => string;
+  untitledImage: string;
   consolePreview: string;
   bridgeSnapshot: string;
   noBridge: string;
@@ -251,6 +254,8 @@ const copy: Record<Language, Copy> = {
     extractSection: "提取图片",
     extractTitle: "导出 PDF 内嵌图片资源",
     extractFilterTitle: "提取筛选",
+    titledImagesOnly: "仅提取带标题的图片",
+    titledImagesHint: "优先使用图片对象名称，其次识别页面附近的图题并用于命名。",
     byPage: "按页",
     byChapter: "按章节",
     customRange: "自定义区间",
@@ -309,6 +314,7 @@ const copy: Record<Language, Copy> = {
     noImages: "还没有提取任何图片。",
     imageResults: "图片结果",
     imageCount: (count) => `${count} 张图片`,
+    untitledImage: "未命名图片",
     consolePreview: "控制台预览",
     bridgeSnapshot: "桥接层输出快照",
     noBridge: "还没有桥接预览输出。",
@@ -402,6 +408,8 @@ const copy: Record<Language, Copy> = {
     extractSection: "Extract Images",
     extractTitle: "Export embedded images from the PDF",
     extractFilterTitle: "Extraction Filters",
+    titledImagesOnly: "Only keep titled images",
+    titledImagesHint: "Prefer image object names, then detect nearby captions and use them for filenames.",
     byPage: "By Page",
     byChapter: "By Chapter",
     customRange: "Custom Range",
@@ -460,6 +468,7 @@ const copy: Record<Language, Copy> = {
     noImages: "No images extracted yet.",
     imageResults: "Image Results",
     imageCount: (count) => `${count} images`,
+    untitledImage: "Untitled image",
     consolePreview: "Console Preview",
     bridgeSnapshot: "Bridge output snapshot",
     noBridge: "No bridge preview yet.",
@@ -655,6 +664,7 @@ export function App() {
   const [minImageWidth, setMinImageWidth] = useState("320");
   const [minImageHeight, setMinImageHeight] = useState("240");
   const [minImageBytesKb, setMinImageBytesKb] = useState("24");
+  const [requireImageTitle, setRequireImageTitle] = useState(false);
   const [customRangesText, setCustomRangesText] = useState(sampleRanges);
   const [rangeItems, setRangeItems] = useState<RangeItem[]>(() => parseRangeItems(sampleRanges));
   const [rangeDraftLabel, setRangeDraftLabel] = useState("");
@@ -767,6 +777,7 @@ export function App() {
     setMinImageWidth("320");
     setMinImageHeight("240");
     setMinImageBytesKb("24");
+    setRequireImageTitle(false);
     setCustomRangesText(sampleRanges);
     setRangeItems(parseRangeItems(sampleRanges));
     setRangeDraftLabel("");
@@ -918,7 +929,8 @@ export function App() {
         outputDir: imageOutputDir,
         minWidth: Number(minImageWidth || 0),
         minHeight: Number(minImageHeight || 0),
-        minBytes: Number(minImageBytesKb || 0) * 1024
+        minBytes: Number(minImageBytesKb || 0) * 1024,
+        requireTitle: requireImageTitle
       });
       applyExtractImages(result);
     } catch (error) {
@@ -941,97 +953,112 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <div className="sidebar-topbar">
-          <div>
-            <p className="eyebrow">{strings.appName}</p>
-            <strong className="sidebar-title">{strings.workbench}</strong>
+      <div className="app-backdrop" aria-hidden="true" />
+
+      <header className="masthead">
+        <div className="masthead-bar">
+          <div className="brand-lockup">
+            <span className="product-mark">PTS</span>
+            <div>
+              <p className="eyebrow">{strings.appName}</p>
+              <h1 className="brand-title">{strings.workbench}</h1>
+            </div>
           </div>
-          <div className="lang-switch" aria-label={strings.langLabel}>
-            <button
-              type="button"
-              className={language === "zh" ? "lang-button is-active" : "lang-button"}
-              onClick={() => setLanguage("zh")}
-            >
-              {strings.zh}
-            </button>
-            <button
-              type="button"
-              className={language === "en" ? "lang-button is-active" : "lang-button"}
-              onClick={() => setLanguage("en")}
-            >
-              {strings.en}
-            </button>
+          <div className="masthead-actions">
+            <div className="status-ribbon">
+              <span>{strings.sessionOverview}</span>
+              <strong>{status}</strong>
+            </div>
+            <div className="lang-switch" aria-label={strings.langLabel}>
+              <button
+                type="button"
+                className={language === "zh" ? "lang-button is-active" : "lang-button"}
+                onClick={() => setLanguage("zh")}
+              >
+                {strings.zh}
+              </button>
+              <button
+                type="button"
+                className={language === "en" ? "lang-button is-active" : "lang-button"}
+                onClick={() => setLanguage("en")}
+              >
+                {strings.en}
+              </button>
+            </div>
           </div>
         </div>
 
-        <section className="hero-panel">
-          <div className="hero-glow" aria-hidden="true" />
-          <div className="hero-copy">
-            <h1>{strings.heroTitle}</h1>
-            <p>{strings.heroBody}</p>
-          </div>
-          <div className="hero-meta">
-            <div>
-              <span>{strings.appName}</span>
-              <strong>{status}</strong>
+        <div className="masthead-grid">
+          <section className="hero-panel hero-sheet">
+            <div className="hero-glow" aria-hidden="true" />
+            <div className="hero-copy">
+              <h2>{strings.heroTitle}</h2>
+              <p>{strings.heroBody}</p>
             </div>
-            <button className="ghost-button" onClick={loadSample}>
-              {strings.loadSample}
-            </button>
-          </div>
-        </section>
+            <div className="hero-meta">
+              <button className="ghost-button" onClick={loadSample}>
+                {strings.loadSample}
+              </button>
+              <div className="session-badge">
+                <span>{previewEntries.length || splitSegments.length || extractedImages.length ? strings.statusLive : strings.statusIdle}</span>
+                <strong>{strings.appName}</strong>
+              </div>
+            </div>
+            <div className="metric-strip">
+              <article className="metric-tile">
+                <span>{strings.tocLines}</span>
+                <strong>{tocLineCount}</strong>
+              </article>
+              <article className="metric-tile">
+                <span>{strings.hierarchy}</span>
+                <strong>{previewDepth}</strong>
+              </article>
+              <article className="metric-tile">
+                <span>{strings.pdfPages}</span>
+                <strong>{pageCount ?? strings.unknown}</strong>
+              </article>
+              <article className="metric-tile">
+                <span>{strings.lastSplit}</span>
+                <strong>{splitSegments.length || strings.none}</strong>
+              </article>
+              <article className="metric-tile">
+                <span>{strings.imageResults}</span>
+                <strong>{extractedImages.length || strings.none}</strong>
+              </article>
+            </div>
+          </section>
 
-        <section className="sidebar-section">
-          <div className="panel-heading">
-            <h2>{strings.sessionOverview}</h2>
-            <span className="badge">{previewEntries.length || splitSegments.length ? strings.statusLive : strings.statusIdle}</span>
-          </div>
-          <div className="stat-list">
-            <div className="stat-row">
-              <span>{strings.tocLines}</span>
-              <strong>{tocLineCount}</strong>
-            </div>
-            <div className="stat-row">
-              <span>{strings.hierarchy}</span>
-              <strong>{previewDepth}</strong>
-            </div>
-            <div className="stat-row">
-              <span>{strings.pdfPages}</span>
-              <strong>{pageCount ?? strings.unknown}</strong>
-            </div>
-            <div className="stat-row">
-              <span>{strings.lastSplit}</span>
-              <strong>{splitSegments.length || strings.none}</strong>
-            </div>
-          </div>
-        </section>
+          <aside className="overview-dock">
+            <section className="info-panel">
+              <div className="panel-heading-block">
+                <p className="section-kicker">{strings.workflow}</p>
+                <h2>{strings.documentSetup}</h2>
+              </div>
+              <p className="dock-copy">{strings.inputHint}</p>
+              <ol className="workflow-list compact-list">
+                {strings.workflowSteps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+            </section>
 
-        <section className="sidebar-section">
-          <div className="panel-heading">
-            <h2>{strings.workflow}</h2>
-          </div>
-          <ol className="workflow-list">
-            {strings.workflowSteps.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </section>
+            <section className="info-panel">
+              <div className="panel-heading-block">
+                <p className="section-kicker">{strings.splitModes}</p>
+                <h2>{strings.byChapter}</h2>
+              </div>
+              <ul className="tip-list compact-list">
+                {strings.splitModeTips.map((tip) => (
+                  <li key={tip}>{tip}</li>
+                ))}
+              </ul>
+            </section>
+          </aside>
+        </div>
+      </header>
 
-        <section className="sidebar-section">
-          <div className="panel-heading">
-            <h2>{strings.splitModes}</h2>
-          </div>
-          <ul className="tip-list">
-            {strings.splitModeTips.map((tip) => (
-              <li key={tip}>{tip}</li>
-            ))}
-          </ul>
-        </section>
-      </aside>
-
-      <main className="workspace">
-        <section className="window-panel workbench-panel">
+      <main className="canvas-grid">
+        <section className="studio-panel controls-panel">
           <div className="window-toolbar">
             <div className="traffic-lights" aria-hidden="true">
               <span className="dot dot-close" />
@@ -1040,7 +1067,7 @@ export function App() {
             </div>
             <div className="toolbar-title">
               <strong>{strings.documentSetup}</strong>
-              <span>{strings.inputHint}</span>
+              <span>{strings.sourcePdf} / {strings.outputPdf} / {strings.pageOffset}</span>
             </div>
             <div className="toolbar-status">{status}</div>
           </div>
@@ -1082,202 +1109,204 @@ export function App() {
 
             <div className="action-row">
               <button onClick={handlePreview}>{strings.previewMapping}</button>
-              <button className="secondary-button" onClick={handleExport} disabled={!canExport}>
-                {strings.exportPdf}
-              </button>
-            </div>
-
-            <div className="split-panel">
-              <div className="section-header compact">
-                <div>
-                  <p className="section-kicker">{strings.splitSection}</p>
-                  <h2>{strings.splitTitle}</h2>
-                </div>
-              </div>
-
-              <div className="segmented-control" role="tablist" aria-label={strings.splitModes}>
-                {([
-                  ["page", strings.byPage],
-                  ["chapter", strings.byChapter],
-                  ["range", strings.customRange]
-                ] as const).map(([mode, label]) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    className={mode === splitMode ? "segment-button is-active" : "segment-button"}
-                    onClick={() => setSplitMode(mode)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="split-grid">
-                <label className="field">
-                  <span>{strings.splitOutputDirectory}</span>
-                  <div className="input-with-button">
-                    <input value={splitOutputDir} onChange={(event) => setSplitOutputDir(event.target.value)} placeholder={strings.placeholderSplit} />
-                    <button type="button" className="input-action-button" onClick={handlePickSplitDir}>
-                      {strings.chooseFolder}
-                    </button>
-                  </div>
-                </label>
-
-                <div className="helper-card split-mode-card">
-                  <strong>{strings.splitHelpTitle[splitMode]}</strong>
-                  <p>{strings.splitHelpBody[splitMode]}</p>
-                </div>
-              </div>
-
-              {splitMode === "chapter" ? (
-                <div className="chapter-builder">
-                  <div className="chapter-controls">
-                    <div className="chapter-level-picker">
-                      <div className="field">
-                        <span>{strings.splitLevel}</span>
-                        <div className="segmented-control compact-control" role="tablist" aria-label={strings.splitLevel}>
-                          {[1, 2, 3].map((level) => (
-                            <button
-                              key={level}
-                              type="button"
-                              className={level === splitLevel ? "segment-button is-active" : "segment-button"}
-                              onClick={() => setSplitLevel(level as 1 | 2 | 3)}
-                            >
-                              {strings.levelOption(level)}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <p className="chapter-helper">{strings.splitLevelHint}</p>
-                    </div>
-
-                    <label className="toggle-row">
-                      <input
-                        type="checkbox"
-                        checked={includeSupplementary}
-                        onChange={(event) => setIncludeSupplementary(event.target.checked)}
-                      />
-                      <div>
-                        <strong>{strings.includeSupplementary}</strong>
-                        <p>{strings.excludeSupplementaryHint}</p>
-                      </div>
-                    </label>
-                  </div>
-
-                  <div className="chapter-preview-grid">
-                    <div className="helper-card">
-                      <strong>{strings.estimatedFiles}</strong>
-                      <p>{strings.chapterCandidateCount(chapterCandidates.length)}</p>
-                    </div>
-                    <div className="helper-card">
-                      <strong>{strings.exampleEntries}</strong>
-                      <div className="chapter-example-list">
-                        {chapterPreviewCandidates.length ? (
-                          chapterPreviewCandidates.map((entry) => (
-                            <div key={`${entry.level}-${entry.title}-${entry.logicalPage}`} className="chapter-example-item">
-                              <span>{entry.title}</span>
-                              <strong>
-                                {strings.logical} {entry.logicalPage} · {strings.physical} {entry.physicalPage}
-                              </strong>
-                            </div>
-                          ))
-                        ) : (
-                          <p>{strings.noChapterMatches}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-
-              {splitMode === "range" ? (
-                <div className="range-builder">
-                  <div className="range-builder-header">
-                    <div>
-                      <p className="section-kicker">{strings.customBuilder}</p>
-                      <h3>{strings.composeRanges}</h3>
-                    </div>
-                    <span className="badge neutral">{strings.rangesCount(rangeItems.length)}</span>
-                  </div>
-
-                  <div className="range-draft-grid">
-                    <label className="field">
-                      <span>{strings.label}</span>
-                      <input value={rangeDraftLabel} onChange={(event) => setRangeDraftLabel(event.target.value)} placeholder={strings.placeholderLabel} />
-                    </label>
-                    <label className="field">
-                      <span>{strings.startPage}</span>
-                      <input
-                        value={rangeDraftStart}
-                        onChange={(event) => setRangeDraftStart(event.target.value)}
-                        inputMode="numeric"
-                        placeholder={strings.placeholderStart}
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{strings.endPage}</span>
-                      <input
-                        value={rangeDraftEnd}
-                        onChange={(event) => setRangeDraftEnd(event.target.value)}
-                        inputMode="numeric"
-                        placeholder={strings.placeholderEnd}
-                      />
-                    </label>
-                    <div className="range-builder-action">
-                      <button type="button" className="secondary-button" onClick={addRangeItem}>
-                        {strings.addRange}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="range-list">
-                    {rangeItems.length ? (
-                      rangeItems.map((item) => (
-                        <div key={item.id} className="range-item">
-                          <input value={item.label} onChange={(event) => updateRangeItem(item.id, "label", event.target.value)} placeholder={strings.label} />
-                          <input
-                            value={item.startPage}
-                            onChange={(event) => updateRangeItem(item.id, "startPage", event.target.value)}
-                            inputMode="numeric"
-                            placeholder={strings.startPage}
-                          />
-                          <input
-                            value={item.endPage}
-                            onChange={(event) => updateRangeItem(item.id, "endPage", event.target.value)}
-                            inputMode="numeric"
-                            placeholder={strings.endPage}
-                          />
-                          <button type="button" className="icon-button" onClick={() => removeRangeItem(item.id)}>
-                            {strings.remove}
-                          </button>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="empty-state compact-empty">{strings.noRanges}</div>
-                    )}
-                  </div>
-
-                  <label className="field">
-                    <span>{strings.serializedRanges}</span>
-                    <textarea
-                      className="split-ranges"
-                      value={customRangesText}
-                      onChange={(event) => {
-                        setCustomRangesText(event.target.value);
-                        setRangeItems(parseRangeItems(event.target.value));
-                      }}
-                    />
-                  </label>
-                </div>
-              ) : null}
-
-              <div className="action-row split-actions">
-                <button className="accent-button" onClick={handleSplit} disabled={!canSplit}>
-                  {strings.splitPdf}
+                <button className="secondary-button" onClick={handleExport} disabled={!canExport}>
+                  {strings.exportPdf}
                 </button>
               </div>
 
-              <div className="extract-panel">
+            <div className="operations-stack">
+              <section className="operation-module split-panel">
+                <div className="section-header compact">
+                  <div>
+                    <p className="section-kicker">{strings.splitSection}</p>
+                    <h2>{strings.splitTitle}</h2>
+                  </div>
+                </div>
+
+                <div className="segmented-control" role="tablist" aria-label={strings.splitModes}>
+                  {([
+                    ["page", strings.byPage],
+                    ["chapter", strings.byChapter],
+                    ["range", strings.customRange]
+                  ] as const).map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className={mode === splitMode ? "segment-button is-active" : "segment-button"}
+                      onClick={() => setSplitMode(mode)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="split-grid">
+                  <label className="field">
+                    <span>{strings.splitOutputDirectory}</span>
+                    <div className="input-with-button">
+                      <input value={splitOutputDir} onChange={(event) => setSplitOutputDir(event.target.value)} placeholder={strings.placeholderSplit} />
+                      <button type="button" className="input-action-button" onClick={handlePickSplitDir}>
+                        {strings.chooseFolder}
+                      </button>
+                    </div>
+                  </label>
+
+                  <div className="helper-card split-mode-card">
+                    <strong>{strings.splitHelpTitle[splitMode]}</strong>
+                    <p>{strings.splitHelpBody[splitMode]}</p>
+                  </div>
+                </div>
+
+                {splitMode === "chapter" ? (
+                  <div className="chapter-builder">
+                    <div className="chapter-controls">
+                      <div className="chapter-level-picker">
+                        <div className="field">
+                          <span>{strings.splitLevel}</span>
+                          <div className="segmented-control compact-control" role="tablist" aria-label={strings.splitLevel}>
+                            {[1, 2, 3].map((level) => (
+                              <button
+                                key={level}
+                                type="button"
+                                className={level === splitLevel ? "segment-button is-active" : "segment-button"}
+                                onClick={() => setSplitLevel(level as 1 | 2 | 3)}
+                              >
+                                {strings.levelOption(level)}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <p className="chapter-helper">{strings.splitLevelHint}</p>
+                      </div>
+
+                      <label className="toggle-row">
+                        <input
+                          type="checkbox"
+                          checked={includeSupplementary}
+                          onChange={(event) => setIncludeSupplementary(event.target.checked)}
+                        />
+                        <div>
+                          <strong>{strings.includeSupplementary}</strong>
+                          <p>{strings.excludeSupplementaryHint}</p>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className="chapter-preview-grid">
+                      <div className="helper-card">
+                        <strong>{strings.estimatedFiles}</strong>
+                        <p>{strings.chapterCandidateCount(chapterCandidates.length)}</p>
+                      </div>
+                      <div className="helper-card">
+                        <strong>{strings.exampleEntries}</strong>
+                        <div className="chapter-example-list">
+                          {chapterPreviewCandidates.length ? (
+                            chapterPreviewCandidates.map((entry) => (
+                              <div key={`${entry.level}-${entry.title}-${entry.logicalPage}`} className="chapter-example-item">
+                                <span>{entry.title}</span>
+                                <strong>
+                                  {strings.logical} {entry.logicalPage} · {strings.physical} {entry.physicalPage}
+                                </strong>
+                              </div>
+                            ))
+                          ) : (
+                            <p>{strings.noChapterMatches}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {splitMode === "range" ? (
+                  <div className="range-builder">
+                    <div className="range-builder-header">
+                      <div>
+                        <p className="section-kicker">{strings.customBuilder}</p>
+                        <h3>{strings.composeRanges}</h3>
+                      </div>
+                      <span className="badge neutral">{strings.rangesCount(rangeItems.length)}</span>
+                    </div>
+
+                    <div className="range-draft-grid">
+                      <label className="field">
+                        <span>{strings.label}</span>
+                        <input value={rangeDraftLabel} onChange={(event) => setRangeDraftLabel(event.target.value)} placeholder={strings.placeholderLabel} />
+                      </label>
+                      <label className="field">
+                        <span>{strings.startPage}</span>
+                        <input
+                          value={rangeDraftStart}
+                          onChange={(event) => setRangeDraftStart(event.target.value)}
+                          inputMode="numeric"
+                          placeholder={strings.placeholderStart}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>{strings.endPage}</span>
+                        <input
+                          value={rangeDraftEnd}
+                          onChange={(event) => setRangeDraftEnd(event.target.value)}
+                          inputMode="numeric"
+                          placeholder={strings.placeholderEnd}
+                        />
+                      </label>
+                      <div className="range-builder-action">
+                        <button type="button" className="secondary-button" onClick={addRangeItem}>
+                          {strings.addRange}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="range-list">
+                      {rangeItems.length ? (
+                        rangeItems.map((item) => (
+                          <div key={item.id} className="range-item">
+                            <input value={item.label} onChange={(event) => updateRangeItem(item.id, "label", event.target.value)} placeholder={strings.label} />
+                            <input
+                              value={item.startPage}
+                              onChange={(event) => updateRangeItem(item.id, "startPage", event.target.value)}
+                              inputMode="numeric"
+                              placeholder={strings.startPage}
+                            />
+                            <input
+                              value={item.endPage}
+                              onChange={(event) => updateRangeItem(item.id, "endPage", event.target.value)}
+                              inputMode="numeric"
+                              placeholder={strings.endPage}
+                            />
+                            <button type="button" className="icon-button" onClick={() => removeRangeItem(item.id)}>
+                              {strings.remove}
+                            </button>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="empty-state compact-empty">{strings.noRanges}</div>
+                      )}
+                    </div>
+
+                    <label className="field">
+                      <span>{strings.serializedRanges}</span>
+                      <textarea
+                        className="split-ranges"
+                        value={customRangesText}
+                        onChange={(event) => {
+                          setCustomRangesText(event.target.value);
+                          setRangeItems(parseRangeItems(event.target.value));
+                        }}
+                      />
+                    </label>
+                  </div>
+                ) : null}
+
+                <div className="action-row split-actions">
+                  <button className="accent-button" onClick={handleSplit} disabled={!canSplit}>
+                    {strings.splitPdf}
+                  </button>
+                </div>
+              </section>
+
+              <section className="operation-module extract-panel">
                 <div className="section-header compact">
                   <div>
                     <p className="section-kicker">{strings.extractSection}</p>
@@ -1321,18 +1350,30 @@ export function App() {
                   </label>
                 </div>
 
+                <label className="toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={requireImageTitle}
+                    onChange={(event) => setRequireImageTitle(event.target.checked)}
+                  />
+                  <div>
+                    <strong>{strings.titledImagesOnly}</strong>
+                    <p>{strings.titledImagesHint}</p>
+                  </div>
+                </label>
+
                 <div className="action-row split-actions">
                   <button className="secondary-button" onClick={handleExtractImages} disabled={!canExtractImages}>
                     {strings.extractImages}
                   </button>
                 </div>
-              </div>
+              </section>
             </div>
           </div>
         </section>
 
-        <section className="results-panel">
-          <section className="window-panel results-main">
+        <section className="results-column">
+          <section className="studio-panel results-main">
             <div className="section-header">
               <div>
                 <p className="section-kicker">{strings.results}</p>
@@ -1369,8 +1410,8 @@ export function App() {
             </div>
           </section>
 
-          <section className="window-panel stacked-panel results-side">
-            <div className="section-header">
+          <section className="studio-panel stacked-panel results-side">
+            <div className="section-header results-section-header">
               <div>
                 <p className="section-kicker">{strings.validation}</p>
                 <h2>{strings.checksAndExport}</h2>
@@ -1378,32 +1419,32 @@ export function App() {
               <span className="badge neutral">{strings.itemsCount(issues.length)}</span>
             </div>
 
-            <div className="log-block">
+            <div className="log-block log-card validation-card">
               {issues.map((issue) => (
                 <div key={issue}>{issue}</div>
               ))}
             </div>
 
-            <div className="section-header compact">
+            <div className="section-header compact results-section-header">
               <div>
                 <p className="section-kicker">{strings.splitResults}</p>
                 <h2>{strings.generatedSegments}</h2>
               </div>
               <span className="badge neutral">{strings.filesCount(splitSegments.length)}</span>
             </div>
-            <div className="log-block muted">
+            <div className="log-block muted log-card asset-card">
               {splitSegments.length ? (
                 splitSegments.map((segment) => (
-                  <div key={segment.outputPdf} className="segment-result">
-                    <div>
+                  <div key={segment.outputPdf} className="segment-result asset-entry">
+                    <div className="asset-title">
                       {segment.label} · {strings.startPage} {segment.startPage} - {strings.endPage} {segment.endPage}
                     </div>
                     <div className="segment-path">{segment.outputPdf}</div>
                     <div className="summary-actions inline-actions">
-                      <button type="button" className="tiny-button" onClick={() => handleRevealPath(segment.outputPdf)}>
+                      <button type="button" className="tiny-button utility-button" onClick={() => handleRevealPath(segment.outputPdf)}>
                         {strings.openFolder}
                       </button>
-                      <button type="button" className="tiny-button" onClick={() => handleCopyPath(segment.outputPdf)}>
+                      <button type="button" className="tiny-button utility-button" onClick={() => handleCopyPath(segment.outputPdf)}>
                         {strings.copyPath}
                       </button>
                     </div>
@@ -1414,36 +1455,37 @@ export function App() {
               )}
             </div>
 
-            <div className="section-header compact">
+            <div className="section-header compact results-section-header">
               <div>
                 <p className="section-kicker">{strings.consolePreview}</p>
                 <h2>{strings.bridgeSnapshot}</h2>
               </div>
             </div>
-            <div className="log-block muted">
+            <div className="log-block muted log-card bridge-card">
               {previewRows.length ? previewRows.map((row) => <div key={row}>{row}</div>) : <div>{strings.noBridge}</div>}
             </div>
 
-            <div className="section-header compact">
+            <div className="section-header compact results-section-header">
               <div>
                 <p className="section-kicker">{strings.extractSection}</p>
                 <h2>{strings.imageResults}</h2>
               </div>
               <span className="badge neutral">{strings.imageCount(extractedImages.length)}</span>
             </div>
-            <div className="log-block muted">
+            <div className="log-block muted log-card asset-card">
               {extractedImages.length ? (
                 extractedImages.map((image) => (
-                  <div key={image.outputPath} className="segment-result">
-                    <div>
-                      p{image.pageNumber} · {image.width}×{image.height} · {image.extension}
+                  <div key={image.outputPath} className="segment-result asset-entry">
+                    <div className="asset-title">
+                      {image.title || strings.untitledImage}
                     </div>
+                    <div className="segment-path">p{image.pageNumber} · {image.width}×{image.height} · {image.extension}</div>
                     <div className="segment-path">{image.outputPath}</div>
                     <div className="summary-actions inline-actions">
-                      <button type="button" className="tiny-button" onClick={() => handleRevealPath(image.outputPath)}>
+                      <button type="button" className="tiny-button utility-button" onClick={() => handleRevealPath(image.outputPath)}>
                         {strings.openFolder}
                       </button>
-                      <button type="button" className="tiny-button" onClick={() => handleCopyPath(image.outputPath)}>
+                      <button type="button" className="tiny-button utility-button" onClick={() => handleCopyPath(image.outputPath)}>
                         {strings.copyPath}
                       </button>
                     </div>
@@ -1454,38 +1496,38 @@ export function App() {
               )}
             </div>
 
-            <div className="export-summary">
+            <div className="export-summary summary-card">
               <span>{strings.lastExport}</span>
               <strong>{lastExportPath || strings.nothingExported}</strong>
               <div className="summary-actions">
-                <button type="button" className="tiny-button" onClick={() => handleRevealPath(lastExportPath)} disabled={!lastExportPath}>
+                <button type="button" className="tiny-button utility-button" onClick={() => handleRevealPath(lastExportPath)} disabled={!lastExportPath}>
                   {strings.openFolder}
                 </button>
-                <button type="button" className="tiny-button" onClick={() => handleCopyPath(lastExportPath)} disabled={!lastExportPath}>
+                <button type="button" className="tiny-button utility-button" onClick={() => handleCopyPath(lastExportPath)} disabled={!lastExportPath}>
                   {strings.copyPath}
                 </button>
               </div>
             </div>
-            <div className="export-summary">
+            <div className="export-summary summary-card">
               <span>{strings.lastSplitDirectory}</span>
               <strong>{lastSplitDir || strings.noSplitOutput}</strong>
               <div className="summary-actions">
-                <button type="button" className="tiny-button" onClick={() => handleRevealPath(lastSplitDir)} disabled={!lastSplitDir}>
+                <button type="button" className="tiny-button utility-button" onClick={() => handleRevealPath(lastSplitDir)} disabled={!lastSplitDir}>
                   {strings.openFolder}
                 </button>
-                <button type="button" className="tiny-button" onClick={() => handleCopyPath(lastSplitDir)} disabled={!lastSplitDir}>
+                <button type="button" className="tiny-button utility-button" onClick={() => handleCopyPath(lastSplitDir)} disabled={!lastSplitDir}>
                   {strings.copyPath}
                 </button>
               </div>
             </div>
-            <div className="export-summary">
+            <div className="export-summary summary-card">
               <span>{strings.lastImageDirectory}</span>
               <strong>{lastImageDir || strings.noImageOutput}</strong>
               <div className="summary-actions">
-                <button type="button" className="tiny-button" onClick={() => handleRevealPath(lastImageDir)} disabled={!lastImageDir}>
+                <button type="button" className="tiny-button utility-button" onClick={() => handleRevealPath(lastImageDir)} disabled={!lastImageDir}>
                   {strings.openFolder}
                 </button>
-                <button type="button" className="tiny-button" onClick={() => handleCopyPath(lastImageDir)} disabled={!lastImageDir}>
+                <button type="button" className="tiny-button utility-button" onClick={() => handleCopyPath(lastImageDir)} disabled={!lastImageDir}>
                   {strings.copyPath}
                 </button>
               </div>
