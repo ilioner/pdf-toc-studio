@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import sys
 
-from .toc_engine import export_pdf_with_toc, format_preview_rows, parse_toc_text, split_pdf, validate_entries
+from .toc_engine import extract_pdf_images, export_pdf_with_toc, format_preview_rows, parse_toc_text, split_pdf, validate_entries
 
 
 def _load_pdf_page_count(source_pdf: str | Path) -> int | None:
@@ -120,6 +120,39 @@ def split_payload(payload: dict) -> dict:
     }
 
 
+def extract_images_payload(payload: dict) -> dict:
+    source_pdf = payload.get("sourcePdf", "")
+    output_dir = payload.get("outputDir", "")
+    min_width = int(payload.get("minWidth", 0))
+    min_height = int(payload.get("minHeight", 0))
+    min_bytes = int(payload.get("minBytes", 0))
+
+    images = extract_pdf_images(
+        source_pdf,
+        output_dir,
+        min_width=min_width,
+        min_height=min_height,
+        min_bytes=min_bytes,
+    )
+
+    return {
+        "ok": True,
+        "outputDir": output_dir,
+        "imageCount": len(images),
+        "images": [
+            {
+                "pageNumber": image.page_number,
+                "imageIndex": image.image_index,
+                "width": image.width,
+                "height": image.height,
+                "extension": image.extension,
+                "outputPath": image.output_path,
+            }
+            for image in images
+        ],
+    }
+
+
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
@@ -131,6 +164,8 @@ def main() -> int:
             result = export_payload(payload)
         elif action == "split":
             result = split_payload(payload)
+        elif action == "extract_images":
+            result = extract_images_payload(payload)
         else:
             raise ValueError(f"Unsupported action: {action}")
 

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  extractPdfImages,
   exportPdf,
   pickOutputDirectory,
   pickPdfFile,
@@ -8,7 +9,7 @@ import {
   savePdfFile,
   splitPdf
 } from "./tauriBridge";
-import type { Entry, ExportResult, PreviewResult, SplitResult, SplitSegment } from "./types";
+import type { Entry, ExportResult, ExtractImagesResult, ExtractedImage, PreviewResult, SplitResult, SplitSegment } from "./types";
 
 const sampleToc = `第1章 概述    1
     1.1 航空电子的基本内涵    1
@@ -99,12 +100,20 @@ type Copy = {
   previewMapping: string;
   exportPdf: string;
   splitPdf: string;
+  extractImages: string;
   splitSection: string;
   splitTitle: string;
+  extractSection: string;
+  extractTitle: string;
+  extractFilterTitle: string;
   byPage: string;
   byChapter: string;
   customRange: string;
   splitOutputDirectory: string;
+  imageOutputDirectory: string;
+  minImageWidth: string;
+  minImageHeight: string;
+  minImageBytesKb: string;
   chooseFolder: string;
   splitHelpTitle: Record<"page" | "chapter" | "range", string>;
   splitHelpBody: Record<"page" | "chapter" | "range", string>;
@@ -144,6 +153,9 @@ type Copy = {
   openFolder: string;
   copyPath: string;
   noSplit: string;
+  noImages: string;
+  imageResults: string;
+  imageCount: (count: number) => string;
   consolePreview: string;
   bridgeSnapshot: string;
   noBridge: string;
@@ -151,6 +163,9 @@ type Copy = {
   nothingExported: string;
   lastSplitDirectory: string;
   noSplitOutput: string;
+  lastImageDirectory: string;
+  noImageOutput: string;
+  extractFilterHint: string;
   previewStatus: string;
   previewGenerating: string;
   previewReady: (pageCount: number | null) => string;
@@ -158,6 +173,8 @@ type Copy = {
   exportComplete: (entryCount: number) => string;
   splitting: (mode: string) => string;
   splitComplete: (count: number) => string;
+  extractingImages: string;
+  extractComplete: (count: number) => string;
   sampleLoaded: string;
   sourceSelected: string;
   outputSelected: string;
@@ -228,12 +245,20 @@ const copy: Record<Language, Copy> = {
     previewMapping: "预览映射",
     exportPdf: "导出 PDF",
     splitPdf: "拆分 PDF",
+    extractImages: "提取图片",
     splitSection: "拆分 PDF",
     splitTitle: "按页面、章节或自定义区间切分",
+    extractSection: "提取图片",
+    extractTitle: "导出 PDF 内嵌图片资源",
+    extractFilterTitle: "提取筛选",
     byPage: "按页",
     byChapter: "按章节",
     customRange: "自定义区间",
     splitOutputDirectory: "拆分输出目录",
+    imageOutputDirectory: "图片输出目录",
+    minImageWidth: "最小宽度",
+    minImageHeight: "最小高度",
+    minImageBytesKb: "最小体积(KB)",
     chooseFolder: "选择文件夹",
     splitHelpTitle: {
       page: "逐页拆分",
@@ -281,6 +306,9 @@ const copy: Record<Language, Copy> = {
     openFolder: "打开文件夹",
     copyPath: "复制路径",
     noSplit: "还没有执行拆分。",
+    noImages: "还没有提取任何图片。",
+    imageResults: "图片结果",
+    imageCount: (count) => `${count} 张图片`,
     consolePreview: "控制台预览",
     bridgeSnapshot: "桥接层输出快照",
     noBridge: "还没有桥接预览输出。",
@@ -288,6 +316,9 @@ const copy: Record<Language, Copy> = {
     nothingExported: "本次会话尚未导出",
     lastSplitDirectory: "最近拆分目录",
     noSplitOutput: "还没有拆分输出",
+    lastImageDirectory: "最近图片目录",
+    noImageOutput: "还没有图片输出",
+    extractFilterHint: "用最小宽高和体积过滤小图标、角标和装饰图片。",
     previewStatus: "准备预览",
     previewGenerating: "正在生成预览…",
     previewReady: (pageCount) => `预览已就绪${pageCount ? ` · 检测到 ${pageCount} 页` : ""}`,
@@ -295,6 +326,8 @@ const copy: Record<Language, Copy> = {
     exportComplete: (entryCount) => `导出完成 · 已写入 ${entryCount} 条目录`,
     splitting: (mode) => `正在按${mode}拆分 PDF…`,
     splitComplete: (count) => `拆分完成 · 已生成 ${count} 个文件`,
+    extractingImages: "正在提取 PDF 图片…",
+    extractComplete: (count) => `提取完成 · 已导出 ${count} 张图片`,
     sampleLoaded: "已载入示例目录",
     sourceSelected: "已选择源 PDF",
     outputSelected: "已选择输出 PDF",
@@ -363,12 +396,20 @@ const copy: Record<Language, Copy> = {
     previewMapping: "Preview Mapping",
     exportPdf: "Export PDF",
     splitPdf: "Split PDF",
+    extractImages: "Extract Images",
     splitSection: "Split PDF",
     splitTitle: "Slice by page, chapter, or custom range",
+    extractSection: "Extract Images",
+    extractTitle: "Export embedded images from the PDF",
+    extractFilterTitle: "Extraction Filters",
     byPage: "By Page",
     byChapter: "By Chapter",
     customRange: "Custom Range",
     splitOutputDirectory: "Split Output Directory",
+    imageOutputDirectory: "Image Output Directory",
+    minImageWidth: "Min Width",
+    minImageHeight: "Min Height",
+    minImageBytesKb: "Min Size (KB)",
     chooseFolder: "Choose Folder",
     splitHelpTitle: {
       page: "Per-page split",
@@ -416,6 +457,9 @@ const copy: Record<Language, Copy> = {
     openFolder: "Open Folder",
     copyPath: "Copy Path",
     noSplit: "No split run yet.",
+    noImages: "No images extracted yet.",
+    imageResults: "Image Results",
+    imageCount: (count) => `${count} images`,
     consolePreview: "Console Preview",
     bridgeSnapshot: "Bridge output snapshot",
     noBridge: "No bridge preview yet.",
@@ -423,6 +467,9 @@ const copy: Record<Language, Copy> = {
     nothingExported: "Nothing exported in this session",
     lastSplitDirectory: "Last Split Directory",
     noSplitOutput: "No split output yet",
+    lastImageDirectory: "Last Image Directory",
+    noImageOutput: "No image output yet",
+    extractFilterHint: "Use minimum width, height, and file size to skip icons and decorative assets.",
     previewStatus: "Ready for preview",
     previewGenerating: "Generating preview...",
     previewReady: (pageCount) => `Preview ready${pageCount ? ` · ${pageCount} pages detected` : ""}`,
@@ -430,6 +477,8 @@ const copy: Record<Language, Copy> = {
     exportComplete: (entryCount) => `Export complete · ${entryCount} entries written`,
     splitting: (mode) => `Splitting PDF by ${mode}...`,
     splitComplete: (count) => `Split complete · ${count} files created`,
+    extractingImages: "Extracting PDF images...",
+    extractComplete: (count) => `Extraction complete · ${count} images exported`,
     sampleLoaded: "Sample TOC loaded",
     sourceSelected: "Source PDF selected",
     outputSelected: "Output PDF selected",
@@ -602,6 +651,10 @@ export function App() {
   const [splitLevel, setSplitLevel] = useState<1 | 2 | 3>(1);
   const [includeSupplementary, setIncludeSupplementary] = useState(false);
   const [splitOutputDir, setSplitOutputDir] = useState("../pdf-splits");
+  const [imageOutputDir, setImageOutputDir] = useState("../pdf-images");
+  const [minImageWidth, setMinImageWidth] = useState("320");
+  const [minImageHeight, setMinImageHeight] = useState("240");
+  const [minImageBytesKb, setMinImageBytesKb] = useState("24");
   const [customRangesText, setCustomRangesText] = useState(sampleRanges);
   const [rangeItems, setRangeItems] = useState<RangeItem[]>(() => parseRangeItems(sampleRanges));
   const [rangeDraftLabel, setRangeDraftLabel] = useState("");
@@ -609,6 +662,8 @@ export function App() {
   const [rangeDraftEnd, setRangeDraftEnd] = useState("");
   const [splitSegments, setSplitSegments] = useState<SplitSegment[]>([]);
   const [lastSplitDir, setLastSplitDir] = useState("");
+  const [extractedImages, setExtractedImages] = useState<ExtractedImage[]>([]);
+  const [lastImageDir, setLastImageDir] = useState("");
 
   const tocLineCount = useMemo(() => countMeaningfulLines(tocText), [tocText]);
   const previewDepth = useMemo(() => summarizeDepth(previewEntries, strings), [previewEntries, strings]);
@@ -628,6 +683,7 @@ export function App() {
     splitOutputDir.trim().length > 0 &&
     (splitMode !== "chapter" || tocText.trim().length > 0) &&
     (splitMode !== "range" || customRangesText.trim().length > 0);
+  const canExtractImages = sourcePdf.trim().length > 0 && imageOutputDir.trim().length > 0;
 
   async function handlePreview() {
     setStatusState({ kind: "previewGenerating" });
@@ -707,6 +763,10 @@ export function App() {
     setTocText(sampleToc);
     setSplitLevel(1);
     setIncludeSupplementary(false);
+    setImageOutputDir("../pdf-images");
+    setMinImageWidth("320");
+    setMinImageHeight("240");
+    setMinImageBytesKb("24");
     setCustomRangesText(sampleRanges);
     setRangeItems(parseRangeItems(sampleRanges));
     setRangeDraftLabel("");
@@ -736,6 +796,14 @@ export function App() {
     const selected = await pickOutputDirectory();
     if (selected) {
       setSplitOutputDir(selected);
+      setStatusState({ kind: "folderSelected" });
+    }
+  }
+
+  async function handlePickImageDir() {
+    const selected = await pickOutputDirectory();
+    if (selected) {
+      setImageOutputDir(selected);
       setStatusState({ kind: "folderSelected" });
     }
   }
@@ -840,6 +908,35 @@ export function App() {
     setLastSplitDir(result.outputDir);
     setIssueLines(result.issues);
     setStatusState({ kind: "splitComplete", count: result.segmentCount });
+  }
+
+  async function handleExtractImages() {
+    setStatusState({ kind: "custom", text: strings.extractingImages });
+    try {
+      const result = await extractPdfImages({
+        sourcePdf,
+        outputDir: imageOutputDir,
+        minWidth: Number(minImageWidth || 0),
+        minHeight: Number(minImageHeight || 0),
+        minBytes: Number(minImageBytesKb || 0) * 1024
+      });
+      applyExtractImages(result);
+    } catch (error) {
+      applyExtractImages({ ok: false, outputDir: "", imageCount: 0, images: [], error: String(error) });
+    }
+  }
+
+  function applyExtractImages(result: ExtractImagesResult) {
+    if (!result.ok) {
+      setExtractedImages([]);
+      setIssueLines(toErrorIssue(result.error ?? strings.extractImages));
+      setStatusState({ kind: "custom", text: result.error ?? strings.extractImages });
+      return;
+    }
+
+    setExtractedImages(result.images);
+    setLastImageDir(result.outputDir);
+    setStatusState({ kind: "custom", text: strings.extractComplete(result.imageCount) });
   }
 
   return (
@@ -1179,6 +1276,57 @@ export function App() {
                   {strings.splitPdf}
                 </button>
               </div>
+
+              <div className="extract-panel">
+                <div className="section-header compact">
+                  <div>
+                    <p className="section-kicker">{strings.extractSection}</p>
+                    <h2>{strings.extractTitle}</h2>
+                  </div>
+                </div>
+
+                <div className="split-grid">
+                  <label className="field">
+                    <span>{strings.imageOutputDirectory}</span>
+                    <div className="input-with-button">
+                      <input value={imageOutputDir} onChange={(event) => setImageOutputDir(event.target.value)} placeholder={strings.placeholderSplit} />
+                      <button type="button" className="input-action-button" onClick={handlePickImageDir}>
+                        {strings.chooseFolder}
+                      </button>
+                    </div>
+                  </label>
+
+                  <div className="helper-card split-mode-card">
+                    <strong>{strings.extractImages}</strong>
+                    <p>{strings.extractTitle}</p>
+                  </div>
+                </div>
+
+                <div className="extract-filter-grid">
+                  <div className="helper-card">
+                    <strong>{strings.extractFilterTitle}</strong>
+                    <p>{strings.extractFilterHint}</p>
+                  </div>
+                  <label className="field">
+                    <span>{strings.minImageWidth}</span>
+                    <input value={minImageWidth} onChange={(event) => setMinImageWidth(event.target.value)} inputMode="numeric" />
+                  </label>
+                  <label className="field">
+                    <span>{strings.minImageHeight}</span>
+                    <input value={minImageHeight} onChange={(event) => setMinImageHeight(event.target.value)} inputMode="numeric" />
+                  </label>
+                  <label className="field">
+                    <span>{strings.minImageBytesKb}</span>
+                    <input value={minImageBytesKb} onChange={(event) => setMinImageBytesKb(event.target.value)} inputMode="numeric" />
+                  </label>
+                </div>
+
+                <div className="action-row split-actions">
+                  <button className="secondary-button" onClick={handleExtractImages} disabled={!canExtractImages}>
+                    {strings.extractImages}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -1276,6 +1424,36 @@ export function App() {
               {previewRows.length ? previewRows.map((row) => <div key={row}>{row}</div>) : <div>{strings.noBridge}</div>}
             </div>
 
+            <div className="section-header compact">
+              <div>
+                <p className="section-kicker">{strings.extractSection}</p>
+                <h2>{strings.imageResults}</h2>
+              </div>
+              <span className="badge neutral">{strings.imageCount(extractedImages.length)}</span>
+            </div>
+            <div className="log-block muted">
+              {extractedImages.length ? (
+                extractedImages.map((image) => (
+                  <div key={image.outputPath} className="segment-result">
+                    <div>
+                      p{image.pageNumber} · {image.width}×{image.height} · {image.extension}
+                    </div>
+                    <div className="segment-path">{image.outputPath}</div>
+                    <div className="summary-actions inline-actions">
+                      <button type="button" className="tiny-button" onClick={() => handleRevealPath(image.outputPath)}>
+                        {strings.openFolder}
+                      </button>
+                      <button type="button" className="tiny-button" onClick={() => handleCopyPath(image.outputPath)}>
+                        {strings.copyPath}
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div>{strings.noImages}</div>
+              )}
+            </div>
+
             <div className="export-summary">
               <span>{strings.lastExport}</span>
               <strong>{lastExportPath || strings.nothingExported}</strong>
@@ -1296,6 +1474,18 @@ export function App() {
                   {strings.openFolder}
                 </button>
                 <button type="button" className="tiny-button" onClick={() => handleCopyPath(lastSplitDir)} disabled={!lastSplitDir}>
+                  {strings.copyPath}
+                </button>
+              </div>
+            </div>
+            <div className="export-summary">
+              <span>{strings.lastImageDirectory}</span>
+              <strong>{lastImageDir || strings.noImageOutput}</strong>
+              <div className="summary-actions">
+                <button type="button" className="tiny-button" onClick={() => handleRevealPath(lastImageDir)} disabled={!lastImageDir}>
+                  {strings.openFolder}
+                </button>
+                <button type="button" className="tiny-button" onClick={() => handleCopyPath(lastImageDir)} disabled={!lastImageDir}>
                   {strings.copyPath}
                 </button>
               </div>

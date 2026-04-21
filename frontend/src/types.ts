@@ -44,3 +44,20 @@ export type SplitResult = {
   issues: Issue[];
   error?: string;
 };
+
+export type ExtractedImage = {
+  pageNumber: number;
+  imageIndex: number;
+  width: number;
+  height: number;
+  extension: string;
+  outputPath: string;
+};
+
+export type ExtractImagesResult = {
+  ok: boolean;
+  outputDir: string;
+  imageCount: number;
+  images: ExtractedImage[];
+  error?: string;
+};

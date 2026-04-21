@@ -1,4 +1,4 @@
-import type { ExportResult, PreviewResult, SplitResult } from "./types";
+import type { ExportResult, ExtractImagesResult, PreviewResult, SplitResult } from "./types";
 
 declare global {
   interface Window {
@@ -122,6 +122,28 @@ function mockCall<T>(payload: Record<string, unknown>): Promise<T> {
     } as T);
   }
 
+  if (payload.action === "extract_images") {
+    const outputDir = String(payload.outputDir ?? "");
+    const minWidth = Number(payload.minWidth ?? 0);
+    const minHeight = Number(payload.minHeight ?? 0);
+    const minBytes = Number(payload.minBytes ?? 0);
+    return Promise.resolve({
+      ok: true,
+      outputDir,
+      imageCount: 2,
+      images: [1, 2]
+        .map((index) => ({
+        pageNumber: index,
+        imageIndex: 1,
+        width: index === 1 ? 1200 : 640,
+        height: index === 1 ? 800 : 480,
+        extension: "png",
+        outputPath: `${outputDir}/page-${String(index).padStart(4, "0")}-img-01-xref-${index}.png`
+        }))
+        .filter((image) => image.width >= minWidth && image.height >= minHeight && 120000 >= minBytes)
+    } as T);
+  }
+
   return Promise.resolve({
     ok: true,
     outputPdf: String(payload.outputPdf ?? ""),
@@ -165,6 +187,19 @@ export function splitPdf(payload: {
 }): Promise<SplitResult> {
   return callBackend<SplitResult>({
     action: "split",
+    ...payload
+  });
+}
+
+export function extractPdfImages(payload: {
+  sourcePdf: string;
+  outputDir: string;
+  minWidth: number;
+  minHeight: number;
+  minBytes: number;
+}): Promise<ExtractImagesResult> {
+  return callBackend<ExtractImagesResult>({
+    action: "extract_images",
     ...payload
   });
 }

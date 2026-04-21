@@ -32,6 +32,16 @@ class SplitResult:
     output_pdf: str
 
 
+@dataclass(frozen=True)
+class ExtractedImageResult:
+    page_number: int
+    image_index: int
+    width: int
+    height: int
+    extension: str
+    output_path: str
+
+
 def parse_toc_text(toc_text: str, page_offset: int) -> list[ParsedEntry]:
     entries: list[ParsedEntry] = []
 
@@ -339,3 +349,54 @@ def split_pdf(
             )
 
     return results, issues
+
+
+def extract_pdf_images(
+    source_pdf: str | Path,
+    output_dir: str | Path,
+    min_width: int = 0,
+    min_height: int = 0,
+    min_bytes: int = 0,
+) -> list[ExtractedImageResult]:
+    source_pdf = Path(source_pdf)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    results: list[ExtractedImageResult] = []
+    seen_xrefs: set[int] = set()
+
+    with fitz.open(source_pdf) as doc:
+        for page_number, page in enumerate(doc, start=1):
+            image_refs = page.get_images(full=True)
+            page_image_index = 0
+
+            for image in image_refs:
+                xref = image[0]
+                if xref in seen_xrefs:
+                    continue
+
+                seen_xrefs.add(xref)
+                image_data = doc.extract_image(xref)
+                width = int(image_data.get("width", 0))
+                height = int(image_data.get("height", 0))
+                image_bytes = image_data["image"]
+                if width < min_width or height < min_height or len(image_bytes) < min_bytes:
+                    continue
+
+                page_image_index += 1
+                extension = image_data.get("ext", "png")
+                output_path = output_dir / f"page-{page_number:04d}-img-{page_image_index:02d}-xref-{xref}.{extension}"
+                output_path.write_bytes(image_bytes)
+
+                results.append(
+                    ExtractedImageResult(
+                        page_number=page_number,
+                        image_index=page_image_index,
+                        width=width,
+                        height=height,
+                        extension=extension,
+                        output_path=str(output_path),
+                    )
+                )
+
+    return results
