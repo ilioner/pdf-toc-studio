@@ -206,10 +206,24 @@ def _plan_page_segments(pdf_page_count: int) -> list[_SplitPlan]:
     ]
 
 
-def _plan_chapter_segments(entries: list[ParsedEntry], pdf_page_count: int) -> list[_SplitPlan]:
-    top_level_positions = [index for index, entry in enumerate(entries) if entry.level == 1]
+def _is_supplementary_entry(title: str) -> bool:
+    normalized = re.sub(r"\s+", "", title)
+    return normalized in {"思考题", "参考文献", "exercises", "references"}
+
+
+def _plan_chapter_segments(
+    entries: list[ParsedEntry],
+    pdf_page_count: int,
+    split_level: int = 1,
+    include_supplementary: bool = True,
+) -> list[_SplitPlan]:
+    top_level_positions = [
+        index
+        for index, entry in enumerate(entries)
+        if entry.level == split_level and (include_supplementary or not _is_supplementary_entry(entry.title))
+    ]
     if not top_level_positions:
-        raise ValueError("Chapter split requires at least one level-1 TOC entry")
+        raise ValueError(f"Chapter split requires at least one level-{split_level} TOC entry")
 
     plans: list[_SplitPlan] = []
     for position_index, start_index in enumerate(top_level_positions):
@@ -271,6 +285,8 @@ def split_pdf(
     toc_text: str = "",
     page_offset: int = 0,
     ranges_text: str = "",
+    split_level: int = 1,
+    include_supplementary: bool = True,
 ) -> tuple[list[SplitResult], list[ValidationIssue]]:
     source_pdf = Path(source_pdf)
     output_dir = Path(output_dir)
@@ -289,7 +305,12 @@ def split_pdf(
             if fatal_errors:
                 messages = "; ".join(issue.message for issue in fatal_errors)
                 raise ValueError(messages)
-            plans = _plan_chapter_segments(entries, page_count)
+            plans = _plan_chapter_segments(
+                entries,
+                page_count,
+                split_level=split_level,
+                include_supplementary=include_supplementary,
+            )
         elif mode == "range":
             plans = _plan_custom_segments(ranges_text, page_count)
         else:

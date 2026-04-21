@@ -82,6 +82,8 @@ def split_payload(payload: dict) -> dict:
     offset = int(payload.get("offset", 0))
     split_mode = payload.get("splitMode", "")
     ranges_text = payload.get("rangesText", "")
+    split_level = int(payload.get("splitLevel", 1))
+    include_supplementary = bool(payload.get("includeSupplementary", True))
 
     segments, issues = split_pdf(
         source_pdf=source_pdf,
@@ -90,6 +92,8 @@ def split_payload(payload: dict) -> dict:
         toc_text=toc_text,
         page_offset=offset,
         ranges_text=ranges_text,
+        split_level=split_level,
+        include_supplementary=include_supplementary,
     )
 
     return {

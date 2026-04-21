@@ -7,11 +7,19 @@ declare global {
 }
 
 async function callBackend<T>(payload: Record<string, unknown>): Promise<T> {
+  if (window.__PDF_TOC_STUDIO_MOCK__) {
+    return mockCall<T>(payload);
+  }
+
   try {
     const { invoke } = await import("@tauri-apps/api/core");
     return await invoke<T>("run_python_bridge", { payloadJson: JSON.stringify(payload) });
-  } catch {
-    return mockCall<T>(payload);
+  } catch (error) {
+    if (typeof window === "undefined" || !(window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
+      return mockCall<T>(payload);
+    }
+
+    throw error;
   }
 }
 
@@ -23,6 +31,8 @@ async function invokeCommand<T>(command: string, args: Record<string, unknown> =
 function mockCall<T>(payload: Record<string, unknown>): Promise<T> {
   const offset = Number(payload.offset ?? 0);
   const tocText = String(payload.tocText ?? "");
+  const splitLevel = Number(payload.splitLevel ?? 1);
+  const includeSupplementary = Boolean(payload.includeSupplementary ?? true);
   const lines = tocText
     .split("\n")
     .map((line) => line.trimEnd())
@@ -61,12 +71,31 @@ function mockCall<T>(payload: Record<string, unknown>): Promise<T> {
           }))
         : splitMode === "chapter"
           ? lines
-              .filter((line) => !line.startsWith("    "))
+              .map((line) => {
+                const expanded = line.replace(/\t/g, "    ");
+                const indentChars = expanded.length - expanded.trimStart().length;
+                const level = Math.floor(indentChars / 4) + 1;
+                const match = expanded.match(/^\s*(.*?)\s+(\d+)\s*$/);
+                if (!match) {
+                  return null;
+                }
+                return {
+                  level,
+                  title: match[1].trim(),
+                  physicalPage: Number(match[2]) + offset
+                };
+              })
+              .filter((entry): entry is { level: number; title: string; physicalPage: number } => entry !== null)
+              .filter(
+                (entry) =>
+                  entry.level === splitLevel &&
+                  (includeSupplementary || !["思考题", "参考文献", "Exercises", "References"].includes(entry.title))
+              )
               .slice(0, 3)
-              .map((line, index) => ({
-                label: line.replace(/\s+\d+\s*$/, ""),
-                startPage: index * 10 + 1,
-                endPage: index * 10 + 10,
+              .map((entry, index, entries) => ({
+                label: entry.title,
+                startPage: entry.physicalPage,
+                endPage: (entries[index + 1]?.physicalPage ?? entry.physicalPage + 9) - 1,
                 outputPdf: `${outputDir}/chapter-${index + 1}.pdf`
               }))
           : String(payload.rangesText ?? "")
@@ -131,6 +160,8 @@ export function splitPdf(payload: {
   tocText: string;
   offset: number;
   rangesText: string;
+  splitLevel: number;
+  includeSupplementary: boolean;
 }): Promise<SplitResult> {
   return callBackend<SplitResult>({
     action: "split",

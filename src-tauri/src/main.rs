@@ -5,6 +5,43 @@ use serde_json::Value;
 use std::path::PathBuf;
 use std::process::Command;
 
+fn candidate_python_paths() -> Vec<String> {
+    let mut candidates = Vec::new();
+
+    if let Ok(explicit) = std::env::var("PDF_TOC_STUDIO_PYTHON") {
+        if !explicit.trim().is_empty() {
+            candidates.push(explicit);
+        }
+    }
+
+    candidates.extend([
+        "python3".to_string(),
+        "/opt/homebrew/bin/python3".to_string(),
+        "/usr/local/bin/python3".to_string(),
+        "/usr/bin/python3".to_string(),
+    ]);
+
+    candidates
+}
+
+fn resolve_python(project_root: &PathBuf) -> Result<String, String> {
+    for candidate in candidate_python_paths() {
+        let probe = Command::new(&candidate)
+            .arg("-c")
+            .arg("import fitz, sys; print(sys.executable)")
+            .current_dir(project_root)
+            .output();
+
+        if let Ok(output) = probe {
+            if output.status.success() {
+                return Ok(candidate);
+            }
+        }
+    }
+
+    Err("Unable to find a usable python3 with PyMuPDF (fitz) installed. Set PDF_TOC_STUDIO_PYTHON if needed.".to_string())
+}
+
 #[tauri::command]
 fn run_python_bridge(payload_json: String) -> Result<Value, String> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -13,8 +50,9 @@ fn run_python_bridge(payload_json: String) -> Result<Value, String> {
         .ok_or_else(|| "Unable to resolve project root".to_string())?;
 
     let bridge_path = project_root.join("core").join("bridge.py");
+    let python = resolve_python(&project_root.to_path_buf())?;
 
-    let output = Command::new("python3")
+    let output = Command::new(&python)
         .arg("-m")
         .arg("core.bridge")
         .current_dir(project_root)
@@ -29,7 +67,7 @@ fn run_python_bridge(payload_json: String) -> Result<Value, String> {
             }
             child.wait_with_output()
         })
-        .map_err(|err| format!("Failed to run python bridge {:?}: {}", bridge_path, err))?;
+        .map_err(|err| format!("Failed to run python bridge {:?} with {}: {}", bridge_path, python, err))?;
 
     if !output.status.success() {
       let stderr = String::from_utf8_lossy(&output.stderr).to_string();
