@@ -24,6 +24,14 @@ class ValidationIssue:
     line_number: int | None = None
 
 
+@dataclass(frozen=True)
+class SplitResult:
+    label: str
+    start_page: int
+    end_page: int
+    output_pdf: str
+
+
 def parse_toc_text(toc_text: str, page_offset: int) -> list[ParsedEntry]:
     entries: list[ParsedEntry] = []
 
@@ -151,3 +159,162 @@ def export_pdf_with_toc(
         doc.save(output_pdf)
 
     return entries, issues
+
+
+@dataclass(frozen=True)
+class _SplitPlan:
+    label: str
+    start_page: int
+    end_page: int
+    entries: list[ParsedEntry] | None = None
+
+
+def _sanitize_filename_part(value: str) -> str:
+    cleaned = re.sub(r"[^\w\-]+", "-", value.strip(), flags=re.UNICODE)
+    cleaned = cleaned.strip("-_")
+    return cleaned or "segment"
+
+
+def _build_output_filename(index: int, plan: _SplitPlan) -> str:
+    safe_label = _sanitize_filename_part(plan.label)
+    if plan.start_page == plan.end_page:
+        return f"{index:03d}-{safe_label}-p{plan.start_page:04d}.pdf"
+    return f"{index:03d}-{safe_label}-p{plan.start_page:04d}-{plan.end_page:04d}.pdf"
+
+
+def _build_relative_toc(entries: list[ParsedEntry], segment_start_page: int) -> list[list[int | str]]:
+    if not entries:
+        return []
+
+    base_level = entries[0].level
+    relative_toc: list[list[int | str]] = []
+    for entry in entries:
+        relative_toc.append(
+            [
+                entry.level - base_level + 1,
+                entry.title,
+                entry.physical_page - segment_start_page + 1,
+            ]
+        )
+    return relative_toc
+
+
+def _plan_page_segments(pdf_page_count: int) -> list[_SplitPlan]:
+    return [
+        _SplitPlan(label=f"page-{page_number}", start_page=page_number, end_page=page_number)
+        for page_number in range(1, pdf_page_count + 1)
+    ]
+
+
+def _plan_chapter_segments(entries: list[ParsedEntry], pdf_page_count: int) -> list[_SplitPlan]:
+    top_level_positions = [index for index, entry in enumerate(entries) if entry.level == 1]
+    if not top_level_positions:
+        raise ValueError("Chapter split requires at least one level-1 TOC entry")
+
+    plans: list[_SplitPlan] = []
+    for position_index, start_index in enumerate(top_level_positions):
+        next_start_index = top_level_positions[position_index + 1] if position_index + 1 < len(top_level_positions) else len(entries)
+        segment_entries = entries[start_index:next_start_index]
+        top_entry = segment_entries[0]
+        next_start_page = entries[next_start_index].physical_page if next_start_index < len(entries) else pdf_page_count + 1
+        end_page = max(top_entry.physical_page, next_start_page - 1)
+        plans.append(
+            _SplitPlan(
+                label=top_entry.title,
+                start_page=top_entry.physical_page,
+                end_page=end_page,
+                entries=segment_entries,
+            )
+        )
+
+    return plans
+
+
+def _parse_range_token(token: str, default_label: str) -> _SplitPlan:
+    label = default_label
+    range_text = token.strip()
+    if ":" in range_text:
+        possible_label, possible_range = range_text.split(":", 1)
+        label = possible_label.strip() or default_label
+        range_text = possible_range.strip()
+
+    match = re.fullmatch(r"(\d+)\s*-\s*(\d+)", range_text)
+    if not match:
+        raise ValueError(f"Invalid split range: {token}")
+
+    start_page = int(match.group(1))
+    end_page = int(match.group(2))
+    if start_page < 1 or end_page < start_page:
+        raise ValueError(f"Invalid split range: {token}")
+
+    return _SplitPlan(label=label, start_page=start_page, end_page=end_page)
+
+
+def _plan_custom_segments(ranges_text: str, pdf_page_count: int) -> list[_SplitPlan]:
+    raw_tokens = [token.strip() for token in re.split(r"[\n,]+", ranges_text) if token.strip()]
+    if not raw_tokens:
+        raise ValueError("Custom split ranges are empty")
+
+    plans: list[_SplitPlan] = []
+    for index, token in enumerate(raw_tokens, start=1):
+        plan = _parse_range_token(token, default_label=f"range-{index}")
+        if plan.end_page > pdf_page_count:
+            raise ValueError(f"Split range exceeds PDF page count: {token}")
+        plans.append(plan)
+    return plans
+
+
+def split_pdf(
+    source_pdf: str | Path,
+    output_dir: str | Path,
+    mode: str,
+    toc_text: str = "",
+    page_offset: int = 0,
+    ranges_text: str = "",
+) -> tuple[list[SplitResult], list[ValidationIssue]]:
+    source_pdf = Path(source_pdf)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    with fitz.open(source_pdf) as doc:
+        page_count = doc.page_count
+        issues: list[ValidationIssue] = []
+
+        if mode == "page":
+            plans = _plan_page_segments(page_count)
+        elif mode == "chapter":
+            entries = parse_toc_text(toc_text, page_offset)
+            issues = validate_entries(entries, pdf_page_count=page_count)
+            fatal_errors = [issue for issue in issues if issue.level == "error"]
+            if fatal_errors:
+                messages = "; ".join(issue.message for issue in fatal_errors)
+                raise ValueError(messages)
+            plans = _plan_chapter_segments(entries, page_count)
+        elif mode == "range":
+            plans = _plan_custom_segments(ranges_text, page_count)
+        else:
+            raise ValueError(f"Unsupported split mode: {mode}")
+
+        results: list[SplitResult] = []
+        for index, plan in enumerate(plans, start=1):
+            segment_pdf = fitz.open()
+            segment_pdf.insert_pdf(doc, from_page=plan.start_page - 1, to_page=plan.end_page - 1)
+            relative_toc = _build_relative_toc(plan.entries or [], plan.start_page)
+            if relative_toc:
+                segment_pdf.set_toc(relative_toc)
+            segment_pdf.set_page_labels([{"startpage": 0, "prefix": "", "style": "D", "firstpagenum": 1}])
+
+            output_pdf = output_dir / _build_output_filename(index, plan)
+            segment_pdf.save(output_pdf)
+            segment_pdf.close()
+
+            results.append(
+                SplitResult(
+                    label=plan.label,
+                    start_page=plan.start_page,
+                    end_page=plan.end_page,
+                    output_pdf=str(output_pdf),
+                )
+            )
+
+    return results, issues

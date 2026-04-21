@@ -28,3 +28,19 @@ export type ExportResult = {
   issues: Issue[];
   error?: string;
 };
+
+export type SplitSegment = {
+  label: string;
+  startPage: number;
+  endPage: number;
+  outputPdf: string;
+};
+
+export type SplitResult = {
+  ok: boolean;
+  outputDir: string;
+  segmentCount: number;
+  segments: SplitSegment[];
+  issues: Issue[];
+  error?: string;
+};

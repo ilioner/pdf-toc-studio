@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import sys
 
-from .toc_engine import export_pdf_with_toc, format_preview_rows, parse_toc_text, validate_entries
+from .toc_engine import export_pdf_with_toc, format_preview_rows, parse_toc_text, split_pdf, validate_entries
 
 
 def _load_pdf_page_count(source_pdf: str | Path) -> int | None:
@@ -75,6 +75,47 @@ def export_payload(payload: dict) -> dict:
     }
 
 
+def split_payload(payload: dict) -> dict:
+    source_pdf = payload.get("sourcePdf", "")
+    output_dir = payload.get("outputDir", "")
+    toc_text = payload.get("tocText", "")
+    offset = int(payload.get("offset", 0))
+    split_mode = payload.get("splitMode", "")
+    ranges_text = payload.get("rangesText", "")
+
+    segments, issues = split_pdf(
+        source_pdf=source_pdf,
+        output_dir=output_dir,
+        mode=split_mode,
+        toc_text=toc_text,
+        page_offset=offset,
+        ranges_text=ranges_text,
+    )
+
+    return {
+        "ok": True,
+        "outputDir": output_dir,
+        "segmentCount": len(segments),
+        "segments": [
+            {
+                "label": segment.label,
+                "startPage": segment.start_page,
+                "endPage": segment.end_page,
+                "outputPdf": segment.output_pdf,
+            }
+            for segment in segments
+        ],
+        "issues": [
+            {
+                "level": issue.level,
+                "message": issue.message,
+                "lineNumber": issue.line_number,
+            }
+            for issue in issues
+        ],
+    }
+
+
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
@@ -84,6 +125,8 @@ def main() -> int:
             result = preview_payload(payload)
         elif action == "export":
             result = export_payload(payload)
+        elif action == "split":
+            result = split_payload(payload)
         else:
             raise ValueError(f"Unsupported action: {action}")
 

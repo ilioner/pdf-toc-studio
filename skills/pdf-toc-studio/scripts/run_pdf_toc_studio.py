@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from core.bridge import export_payload, preview_payload
+from core.bridge import export_payload, preview_payload, split_payload
 
 
 def _load_toc_text(args: argparse.Namespace) -> str:
@@ -22,13 +22,20 @@ def _load_toc_text(args: argparse.Namespace) -> str:
 
 
 def _build_payload(args: argparse.Namespace) -> dict[str, object]:
-    payload: dict[str, object] = {
-        "sourcePdf": args.pdf,
-        "tocText": _load_toc_text(args),
-        "offset": args.offset,
-    }
+    payload: dict[str, object] = {"sourcePdf": args.pdf}
+
+    if args.command in {"preview", "export"}:
+        payload["tocText"] = _load_toc_text(args)
+        payload["offset"] = args.offset
+
     if args.command == "export":
         payload["outputPdf"] = args.out
+    elif args.command == "split":
+        payload["outputDir"] = args.output_dir
+        payload["splitMode"] = args.split_mode
+        payload["offset"] = args.offset
+        payload["tocText"] = _load_toc_text(args) if args.split_mode == "chapter" else ""
+        payload["rangesText"] = args.ranges_text or ""
     return payload
 
 
@@ -51,14 +58,25 @@ def main() -> int:
     add_common_arguments(export_parser)
     export_parser.add_argument("--out", required=True, help="Output PDF path")
 
+    split_parser = subparsers.add_parser("split", help="Split a PDF by page, chapter, or custom range")
+    split_parser.add_argument("--pdf", required=True, help="Source PDF path")
+    split_parser.add_argument("--output-dir", required=True, help="Output directory for split PDFs")
+    split_parser.add_argument("--split-mode", choices=["page", "chapter", "range"], required=True)
+    split_parser.add_argument("--toc-text", help="Inline TOC text, required for chapter split")
+    split_parser.add_argument("--toc-file", help="TOC text file path, required for chapter split")
+    split_parser.add_argument("--ranges-text", help="Custom ranges, required for range split")
+    split_parser.add_argument("--offset", type=int, default=0, help="Logical to physical page offset")
+
     args = parser.parse_args()
 
     try:
         payload = _build_payload(args)
         if args.command == "preview":
             result = preview_payload(payload)
-        else:
+        elif args.command == "export":
             result = export_payload(payload)
+        else:
+            result = split_payload(payload)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     except Exception as exc:

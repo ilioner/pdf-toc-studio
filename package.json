@@ -7,7 +7,8 @@
     "frontend:build": "npm --prefix frontend run build",
     "frontend:preview": "npm --prefix frontend run preview",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "package:macos": "bash scripts/package-macos.sh"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.2"
